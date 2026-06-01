@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Commspurx</string>
+    <string name="notification_channel_alerts">Alerts</string>
+    <string name="notification_channel_alerts_desc">Approvals and activity updates</string>
+    <string name="notification_channel_urgent">Urgent alerts</string>
+    <string name="notification_channel_urgent_desc">Critical purchase stock and contract coverage warnings</string>
+    <string name="notification_channel_monitor">Background monitor</string>
+    <string name="notification_channel_monitor_desc">Keeps Commspurx checking for new updates</string>
+    <string name="monitor_notification_title">Commspurx active</string>
+    <string name="monitor_notification_body">Watching for approvals and notifications</string>
+</resources>
