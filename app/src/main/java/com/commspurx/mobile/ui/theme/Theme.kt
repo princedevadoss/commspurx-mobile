@@ -15,83 +15,94 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Matches web app primary (#21c45d). */
-val BrandPrimary = Color(0xFF21C45D)
-val BrandPrimaryDark = Color(0xFF3DDC84)
-val BrandPrimaryContainer = Color(0xFFD8F8E4)
-val BrandSecondary = Color(0xFF1E4D8C)
-val BrandAccent = Color(0xFFFFB020)
-val ConnectedGreen = Color(0xFF22C55E)
-val OfflineRed = Color(0xFFEF4444)
+/** Refined navy + brass palette — professional operations dashboard. */
+val BrandPrimary = Color(0xFF1E3A5F)
+val BrandPrimaryDark = Color(0xFF8EB4E8)
+val BrandPrimaryContainer = Color(0xFFE8EEF5)
+val BrandSecondary = Color(0xFF2D6A4F)
+val BrandAccent = Color(0xFFC9A962)
+val ConnectedGreen = Color(0xFF2D6A4F)
+val OfflineRed = Color(0xFFB42318)
 
-val HubGradientLight = Brush.verticalGradient(
-    colors = listOf(Color(0xFFF4F7FB), Color(0xFFF8FAFC), Color(0xFFFFFFFF)),
+val AppShellGradientLight = Brush.verticalGradient(
+    colors = listOf(Color(0xFFF4F6F9), Color(0xFFFAFBFC), Color(0xFFFFFFFF)),
 )
-val HubGradientDark = Brush.verticalGradient(
-    colors = listOf(Color(0xFF101418), Color(0xFF141A20), Color(0xFF181D24)),
+val AppShellGradientDark = Brush.verticalGradient(
+    colors = listOf(Color(0xFF0F1419), Color(0xFF141A22), Color(0xFF1A212B)),
 )
+
+/** @deprecated Use {@link AppShellGradientLight}. */
+val HubGradientLight = AppShellGradientLight
+
+/** @deprecated Use {@link AppShellGradientDark}. */
+val HubGradientDark = AppShellGradientDark
 
 private val LightColors = lightColorScheme(
     primary = BrandPrimary,
     onPrimary = Color.White,
     primaryContainer = BrandPrimaryContainer,
-    onPrimaryContainer = Color(0xFF0B3D22),
+    onPrimaryContainer = Color(0xFF0F2438),
     secondary = BrandSecondary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE3EDFA),
-    onSecondaryContainer = Color(0xFF0F2A4D),
+    secondaryContainer = Color(0xFFE6F2EC),
+    onSecondaryContainer = Color(0xFF0F3324),
     tertiary = BrandAccent,
+    onTertiary = Color(0xFF2A2210),
     error = Color(0xFFB42318),
-    background = Color(0xFFF4F7F5),
+    background = Color(0xFFF4F6F9),
     surface = Color.White,
-    surfaceVariant = Color(0xFFEEF4F0),
-    onSurface = Color(0xFF141A17),
-    onSurfaceVariant = Color(0xFF5A6760),
-    outline = Color(0xFFC5D4CB),
+    surfaceVariant = Color(0xFFEEF1F5),
+    onSurface = Color(0xFF141C24),
+    onSurfaceVariant = Color(0xFF5C6773),
+    outline = Color(0xFFD0D7DE),
 )
 
 private val DarkColors = darkColorScheme(
     primary = BrandPrimaryDark,
-    onPrimary = Color(0xFF062A16),
-    primaryContainer = Color(0xFF1A3D2B),
-    onPrimaryContainer = Color(0xFFB8F0D0),
-    secondary = Color(0xFF7EB4FF),
-    onSecondary = Color(0xFF0B1B33),
-    secondaryContainer = Color(0xFF1A3358),
-    onSecondaryContainer = Color(0xFFD6E6FF),
+    onPrimary = Color(0xFF0A1520),
+    primaryContainer = Color(0xFF1A2D42),
+    onPrimaryContainer = Color(0xFFD4E4F7),
+    secondary = Color(0xFF6BC49A),
+    onSecondary = Color(0xFF0A2018),
+    secondaryContainer = Color(0xFF1A3328),
+    onSecondaryContainer = Color(0xFFC8E8D8),
     tertiary = BrandAccent,
+    onTertiary = Color(0xFF2A2210),
     error = Color(0xFFFF8A80),
-    background = Color(0xFF0E1110),
-    surface = Color(0xFF171B19),
-    surfaceVariant = Color(0xFF232A27),
-    onSurface = Color(0xFFE8F0EB),
-    onSurfaceVariant = Color(0xFFA3B0A8),
-    outline = Color(0xFF3A4540),
+    background = Color(0xFF0F1419),
+    surface = Color(0xFF171D25),
+    surfaceVariant = Color(0xFF222A34),
+    onSurface = Color(0xFFE8EDF2),
+    onSurfaceVariant = Color(0xFF9AA5B1),
+    outline = Color(0xFF3A4550),
 )
 
 private val AppTypography = Typography(
     headlineMedium = TextStyle(
-        fontSize = 28.sp,
+        fontSize = 26.sp,
         fontWeight = FontWeight.Bold,
-        letterSpacing = (-0.5).sp,
+        letterSpacing = (-0.25).sp,
     ),
     titleLarge = TextStyle(
         fontSize = 20.sp,
         fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.15).sp,
     ),
     titleMedium = TextStyle(
         fontSize = 17.sp,
         fontWeight = FontWeight.SemiBold,
     ),
-    bodyLarge = TextStyle(fontSize = 16.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
     labelLarge = TextStyle(
-        fontSize = 14.sp,
+        fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.2.sp,
     ),
     labelMedium = TextStyle(
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
+        letterSpacing = 0.15.sp,
     ),
 )
 

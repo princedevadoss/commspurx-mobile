@@ -23,7 +23,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Android emulator → host machine localhost
-        buildConfigField("String", "API_BASE_URL", "\"http://192.168.88.7:3000/api\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.88.5:3000/api\"")
     }
 
     buildTypes {
@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

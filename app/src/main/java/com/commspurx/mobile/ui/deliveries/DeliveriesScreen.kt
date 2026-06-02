@@ -24,7 +24,8 @@ import com.commspurx.mobile.ui.components.TabBadgeLabel
 fun DeliveriesScreen(
     viewModel: DeliveriesViewModel,
     connectionStatus: BackendConnectionStatus,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
+    embeddedInMainShell: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -41,23 +42,8 @@ fun DeliveriesScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CommspurxTopBar(
-                title = "Deliveries",
-                subtitle = "Track in-progress and completed loads",
-                showBack = true,
-                onBack = onBack,
-                connectionStatus = connectionStatus,
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
+    val body: @Composable (Modifier) -> Unit = { contentModifier ->
+        Column(modifier = contentModifier.fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab.ordinal) {
                 Tab(
                     selected = selectedTab == DeliveryTab.Current,
@@ -84,10 +70,29 @@ fun DeliveriesScreen(
             DeliveryListContent(
                 deliveries = state.visibleDeliveries,
                 emptyMessage = when (selectedTab) {
-                    DeliveryTab.Current -> "No current deliveries."
+                    DeliveryTab.Current -> "No pending deliveries."
                     DeliveryTab.Completed -> "No completed deliveries yet."
                 },
             )
+        }
+    }
+
+    if (embeddedInMainShell) {
+        body(Modifier)
+    } else {
+        Scaffold(
+            topBar = {
+                CommspurxTopBar(
+                    title = "Deliveries",
+                    subtitle = "Track in-progress and completed loads",
+                    showBack = true,
+                    onBack = onBack,
+                    connectionStatus = connectionStatus,
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            body(Modifier.padding(padding))
         }
     }
 }

@@ -7,6 +7,10 @@ sealed class DeepLinkTarget {
 
     data object Deliveries : DeepLinkTarget()
 
+    data object PurchaseContracts : DeepLinkTarget()
+
+    data object SalesContracts : DeepLinkTarget()
+
     data class BulkImport(
         val jobId: String,
         val notificationId: String? = null,
@@ -21,6 +25,8 @@ data class MonitorSnapshot(
     val approvals: List<com.commspurx.mobile.data.model.ApprovalItem>,
     val notifications: List<com.commspurx.mobile.data.model.NotificationItem>,
     val pendingDeliveries: List<com.commspurx.mobile.data.model.DeliveryItem> = emptyList(),
+    val pendingPurchaseContracts: List<com.commspurx.mobile.data.model.ContractSummary> = emptyList(),
+    val pendingSalesContracts: List<com.commspurx.mobile.data.model.ContractSummary> = emptyList(),
 )
 
 object NotificationExtras {
@@ -32,4 +38,6 @@ object NotificationExtras {
     const val DEST_ACTIVITY = "activity"
     const val DEST_BULK_IMPORT = "bulk_import"
     const val DEST_DELIVERIES = "deliveries"
+    const val DEST_PURCHASE_CONTRACTS = "purchase_contracts"
+    const val DEST_SALES_CONTRACTS = "sales_contracts"
 }

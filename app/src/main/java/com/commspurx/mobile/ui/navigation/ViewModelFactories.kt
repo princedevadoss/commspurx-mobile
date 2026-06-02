@@ -3,6 +3,7 @@ package com.commspurx.mobile.ui.navigation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.commspurx.mobile.data.local.BadgeStore
+import com.commspurx.mobile.data.local.MonitorSeenStore
 import com.commspurx.mobile.data.model.SessionSnapshot
 import com.commspurx.mobile.data.repository.ApprovalsRepository
 import com.commspurx.mobile.data.repository.AuthRepository
@@ -42,6 +43,7 @@ class HubViewModelFactory(
     private val salesContractsRepository: SalesContractsRepository,
     private val badgeStore: BadgeStore,
     private val stopNotificationMonitor: () -> Unit,
+    private val onDataSynced: () -> Unit,
     private val onLoggedOut: () -> Unit,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
@@ -58,6 +60,7 @@ class HubViewModelFactory(
                 salesContractsRepository = salesContractsRepository,
                 badgeStore = badgeStore,
                 stopNotificationMonitor = stopNotificationMonitor,
+                onDataSynced = onDataSynced,
                 onLoggedOut = onLoggedOut,
             ) as T
         }
@@ -94,6 +97,7 @@ class NotificationsViewModelFactory(
     private val approvalsRepository: ApprovalsRepository,
     private val bulkImportRepository: BulkImportRepository,
     private val badgeStore: BadgeStore,
+    private val monitorSeenStore: MonitorSeenStore,
     private val onNavigateToDeliveries: () -> Unit,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
@@ -106,6 +110,7 @@ class NotificationsViewModelFactory(
                 approvalsRepository = approvalsRepository,
                 bulkImportRepository = bulkImportRepository,
                 badgeStore = badgeStore,
+                monitorSeenStore = monitorSeenStore,
                 onNavigateToDeliveries = onNavigateToDeliveries,
             ) as T
         }
@@ -117,6 +122,7 @@ class DeliveriesViewModelFactory(
     private val session: SessionSnapshot,
     private val deliveriesRepository: DeliveriesRepository,
     private val badgeStore: BadgeStore,
+    private val monitorSeenStore: MonitorSeenStore,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -126,6 +132,7 @@ class DeliveriesViewModelFactory(
                 account = session.account,
                 deliveriesRepository = deliveriesRepository,
                 badgeStore = badgeStore,
+                monitorSeenStore = monitorSeenStore,
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

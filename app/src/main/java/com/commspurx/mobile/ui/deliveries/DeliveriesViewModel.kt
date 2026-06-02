@@ -3,6 +3,7 @@ package com.commspurx.mobile.ui.deliveries
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.commspurx.mobile.data.local.BadgeStore
+import com.commspurx.mobile.data.local.MonitorSeenStore
 import com.commspurx.mobile.data.model.AuthAccount
 import com.commspurx.mobile.data.model.AuthUser
 import com.commspurx.mobile.data.model.DeliveryItem
@@ -42,6 +43,7 @@ class DeliveriesViewModel(
     account: AuthAccount?,
     private val deliveriesRepository: DeliveriesRepository,
     private val badgeStore: BadgeStore,
+    private val monitorSeenStore: MonitorSeenStore,
 ) : ViewModel() {
     private val accountId = user.accountId
     private val _uiState = MutableStateFlow(DeliveriesUiState(user = user, account = account))
@@ -61,8 +63,15 @@ class DeliveriesViewModel(
     fun markHubAndCurrentTabSeen() {
         val state = _uiState.value
         val currentIds = state.currentDeliveries.map { it.id }
+        val completedIds = state.completedDeliveries.map { it.id }
         badgeStore.markHubDeliveriesSeen(currentIds)
         badgeStore.markCurrentTabSeen(currentIds)
+        viewModelScope.launch {
+            monitorSeenStore.markPendingDeliveriesSeen(currentIds)
+            if (state.selectedTab == DeliveryTab.Completed) {
+                monitorSeenStore.markCompletedDeliveriesSeen(completedIds)
+            }
+        }
         refreshTabBadges()
     }
 
@@ -137,9 +146,16 @@ class DeliveriesViewModel(
                 val ids = state.currentDeliveries.map { it.id }
                 badgeStore.markHubDeliveriesSeen(ids)
                 badgeStore.markCurrentTabSeen(ids)
+                viewModelScope.launch {
+                    monitorSeenStore.markPendingDeliveriesSeen(ids)
+                }
             }
             DeliveryTab.Completed -> {
-                badgeStore.markCompletedTabSeen(state.completedDeliveries.map { it.id })
+                val ids = state.completedDeliveries.map { it.id }
+                badgeStore.markCompletedTabSeen(ids)
+                viewModelScope.launch {
+                    monitorSeenStore.markCompletedDeliveriesSeen(ids)
+                }
             }
         }
         refreshTabBadges()

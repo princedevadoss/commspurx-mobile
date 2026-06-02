@@ -1,24 +1,43 @@
 package com.commspurx.mobile.notifications
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.commspurx.mobile.MainActivity
 import com.commspurx.mobile.R
 import com.commspurx.mobile.data.model.ApprovalItem
+import com.commspurx.mobile.data.model.ContractSummary
+import com.commspurx.mobile.data.model.DeliveryItem
 import com.commspurx.mobile.data.model.NotificationItem
 import com.commspurx.mobile.data.model.APPROVAL_ENTITY_LABELS
+import com.commspurx.mobile.data.model.displayRef
 
 class SystemNotificationHelper(private val context: Context) {
     private val notificationManager = NotificationManagerCompat.from(context)
 
     init {
         createChannels()
+    }
+
+    fun canPostNotifications(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return false
+            }
+        }
+        return notificationManager.areNotificationsEnabled()
     }
 
     fun showApprovalNotification(item: ApprovalItem) {
@@ -66,6 +85,52 @@ class SystemNotificationHelper(private val context: Context) {
         }
     }
 
+    fun showPendingDeliveryNotification(delivery: DeliveryItem) {
+        val notificationId = pendingDeliveryNotificationId(delivery.id)
+        post(
+            id = notificationId,
+            title = "New pending delivery",
+            body = "${delivery.displayId.ifBlank { delivery.id }}: ${delivery.vehicleNo.ifBlank { "Scheduled load" }}",
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_DELIVERIES),
+            channelId = CHANNEL_ALERTS,
+        )
+    }
+
+    fun showCompletedDeliveryNotification(delivery: DeliveryItem) {
+        val notificationId = completedDeliveryNotificationId(delivery.id)
+        post(
+            id = notificationId,
+            title = "Delivery completed",
+            body = "${delivery.displayId.ifBlank { delivery.id }}: ${delivery.vehicleNo.ifBlank { "Load finished" }}",
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_DELIVERIES),
+            channelId = CHANNEL_ALERTS,
+        )
+    }
+
+    fun showPendingPurchaseContractNotification(contract: ContractSummary) {
+        val notificationId = pendingPurchaseNotificationId(contract.id)
+        post(
+            id = notificationId,
+            title = "Pending purchase contract",
+            body = "${contract.displayRef()} expires ${contract.periodEnd}",
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_PURCHASE_CONTRACTS),
+            channelId = CHANNEL_ALERTS,
+            alertAgain = true,
+        )
+    }
+
+    fun showPendingSalesContractNotification(contract: ContractSummary) {
+        val notificationId = pendingSalesNotificationId(contract.id)
+        post(
+            id = notificationId,
+            title = "Pending sales contract",
+            body = "${contract.displayRef()} expires ${contract.periodEnd}",
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_SALES_CONTRACTS),
+            channelId = CHANNEL_ALERTS,
+            alertAgain = true,
+        )
+    }
+
     fun showMonitorForegroundNotification(): android.app.Notification {
         createMonitorChannel()
         val intent = Intent(context, MainActivity::class.java)
@@ -92,8 +157,12 @@ class SystemNotificationHelper(private val context: Context) {
         body: String,
         intent: Intent,
         channelId: String,
+        alertAgain: Boolean = false,
     ) {
-        if (!notificationManager.areNotificationsEnabled()) return
+        if (!canPostNotifications()) return
+        if (alertAgain) {
+            notificationManager.cancel(id)
+        }
         val pendingIntent = PendingIntent.getActivity(
             context,
             id,
@@ -108,8 +177,18 @@ class SystemNotificationHelper(private val context: Context) {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .apply {
+                if (alertAgain) {
+                    setOnlyAlertOnce(false)
+                    setDefaults(NotificationCompat.DEFAULT_ALL)
+                }
+            }
             .build()
-        notificationManager.notify(id, notification)
+        try {
+            notificationManager.notify(id, notification)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS revoked at runtime.
+        }
     }
 
     private fun postUrgent(
@@ -118,7 +197,7 @@ class SystemNotificationHelper(private val context: Context) {
         body: String,
         intent: Intent,
     ) {
-        if (!notificationManager.areNotificationsEnabled()) return
+        if (!canPostNotifications()) return
         val pendingIntent = PendingIntent.getActivity(
             context,
             id,
@@ -137,7 +216,10 @@ class SystemNotificationHelper(private val context: Context) {
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(longArrayOf(0, 280, 140, 280))
             .build()
-        notificationManager.notify(id, notification)
+        try {
+            notificationManager.notify(id, notification)
+        } catch (_: SecurityException) {
+        }
     }
 
     private fun deepLinkIntent(
@@ -208,6 +290,18 @@ class SystemNotificationHelper(private val context: Context) {
 
         fun activityNotificationId(notificationId: String): Int =
             "activity:$notificationId".hashCode()
+
+        fun pendingDeliveryNotificationId(deliveryId: String): Int =
+            "pending_delivery:$deliveryId".hashCode()
+
+        fun completedDeliveryNotificationId(deliveryId: String): Int =
+            "completed_delivery:$deliveryId".hashCode()
+
+        fun pendingPurchaseNotificationId(contractId: String): Int =
+            "pending_purchase:$contractId".hashCode()
+
+        fun pendingSalesNotificationId(contractId: String): Int =
+            "pending_sales:$contractId".hashCode()
     }
 }
 
@@ -227,6 +321,8 @@ fun deepLinkFromIntent(intent: Intent?): DeepLinkTarget? {
             )
         }
         NotificationExtras.DEST_DELIVERIES -> DeepLinkTarget.Deliveries
+        NotificationExtras.DEST_PURCHASE_CONTRACTS -> DeepLinkTarget.PurchaseContracts
+        NotificationExtras.DEST_SALES_CONTRACTS -> DeepLinkTarget.SalesContracts
         else -> null
     }
 }

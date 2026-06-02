@@ -6,16 +6,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import com.commspurx.mobile.data.model.ApprovalItem
-import com.commspurx.mobile.data.model.NotificationItem
-import com.commspurx.mobile.data.model.UserRole
-import com.commspurx.mobile.data.model.canAccessApprovals
-import com.commspurx.mobile.data.local.SessionStore
-import com.commspurx.mobile.data.repository.ApprovalsRepository
-import com.commspurx.mobile.data.repository.DeliveriesRepository
-import com.commspurx.mobile.data.repository.NotificationsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,34 +19,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class NotificationMonitorService : LifecycleService() {
-    private lateinit var sessionStore: SessionStore
-    private lateinit var notificationsRepository: NotificationsRepository
-    private lateinit var approvalsRepository: ApprovalsRepository
-    private lateinit var deliveriesRepository: DeliveriesRepository
     private lateinit var systemNotificationHelper: SystemNotificationHelper
 
     private var pollJob: Job? = null
-    private var isAdmin = false
-    private var baselineSet = false
-    private val seenApprovalKeys = mutableSetOf<String>()
-    private val seenNotificationIds = mutableSetOf<String>()
 
     override fun onCreate() {
         super.onCreate()
-        val app = application as com.commspurx.mobile.CommspurxApplication
-        sessionStore = app.sessionStore
-        notificationsRepository = app.notificationsRepository
-        approvalsRepository = app.approvalsRepository
-        deliveriesRepository = app.deliveriesRepository
         systemNotificationHelper = SystemNotificationHelper(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        isAdmin = intent?.getBooleanExtra(EXTRA_IS_ADMIN, false) ?: false
-        baselineSet = false
-        seenApprovalKeys.clear()
-        seenNotificationIds.clear()
+        val resetBaseline = intent?.getBooleanExtra(EXTRA_RESET_BASELINE, false) ?: false
 
         val notification = systemNotificationHelper.showMonitorForegroundNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -69,13 +44,32 @@ class NotificationMonitorService : LifecycleService() {
             startForeground(SystemNotificationHelper.MONITOR_FOREGROUND_ID, notification)
         }
 
-        if (sessionStore.getRefreshToken() == null) {
+        val app = application as com.commspurx.mobile.CommspurxApplication
+        if (app.sessionStore.getRefreshToken() == null) {
             stopSelf()
             return START_NOT_STICKY
         }
 
-        startPolling()
-        return START_NOT_STICKY
+        NotificationPollManager.schedulePoll(
+            context = applicationContext,
+            resetBaseline = resetBaseline,
+            debounce = !resetBaseline,
+        )
+
+        if (pollJob?.isActive != true) {
+            startPollingLoop()
+        }
+
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val app = application as com.commspurx.mobile.CommspurxApplication
+        if (app.sessionStore.getRefreshToken() == null) return
+
+        NotificationMonitorScheduler.armBackgroundPolling(applicationContext)
+        NotificationMonitorScheduler.enqueueBackgroundPoll(applicationContext)
     }
 
     override fun onDestroy() {
@@ -83,81 +77,27 @@ class NotificationMonitorService : LifecycleService() {
         super.onDestroy()
     }
 
-    private fun startPolling() {
+    private fun startPollingLoop() {
         pollJob?.cancel()
         pollJob = lifecycleScope.launch {
             while (isActive) {
-                pollOnce()
-                val inForeground = ProcessLifecycleOwner.get().lifecycle.currentState
-                    .isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
-                delay(if (inForeground) FOREGROUND_POLL_MS else BACKGROUND_POLL_MS)
-            }
-        }
-    }
-
-    private suspend fun pollOnce() {
-        if (sessionStore.getRefreshToken() == null) {
-            stopSelf()
-            return
-        }
-        try {
-            val accountId = sessionStore.getSessionSnapshot()?.user?.accountId ?: return
-            val notifications = notificationsRepository.listUnread(accountId)
-            val approvals = if (isAdmin) approvalsRepository.listPending() else emptyList()
-            val pendingDeliveries = deliveriesRepository.listCurrent(accountId)
-            val snapshot = MonitorSnapshot(
-                approvals = approvals,
-                notifications = notifications,
-                pendingDeliveries = pendingDeliveries,
-            )
-            MonitorState.emitSnapshot(snapshot)
-
-            if (!baselineSet) {
-                seedBaseline(approvals, notifications)
-                baselineSet = true
-                return
-            }
-
-            for (item in approvals) {
-                val key = approvalKey(item)
-                if (key !in seenApprovalKeys) {
-                    seenApprovalKeys.add(key)
-                    systemNotificationHelper.showApprovalNotification(item)
+                delay(POLL_INTERVAL_MS)
+                val result = NotificationPollManager.runPollNow(applicationContext, resetBaseline = false)
+                if (result == PollResult.NoSession) {
+                    stopSelf()
+                    return@launch
                 }
             }
-
-            for (item in notifications) {
-                if (item.id !in seenNotificationIds) {
-                    seenNotificationIds.add(item.id)
-                    systemNotificationHelper.showActivityNotification(item)
-                }
-            }
-        } catch (_: Exception) {
-            // Keep polling on transient errors
         }
     }
-
-    private fun seedBaseline(
-        approvals: List<ApprovalItem>,
-        notifications: List<NotificationItem>,
-    ) {
-        seenApprovalKeys.clear()
-        seenNotificationIds.clear()
-        approvals.forEach { seenApprovalKeys.add(approvalKey(it)) }
-        notifications.forEach { seenNotificationIds.add(it.id) }
-    }
-
-    private fun approvalKey(item: ApprovalItem): String =
-        "${item.entityType}:${item.id}"
 
     companion object {
-        private const val EXTRA_IS_ADMIN = "is_admin"
-        private const val FOREGROUND_POLL_MS = 5_000L
-        private const val BACKGROUND_POLL_MS = 15_000L
+        private const val EXTRA_RESET_BASELINE = "reset_baseline"
+        private val POLL_INTERVAL_MS = NotificationMonitorScheduler.POLL_INTERVAL_MS
 
-        fun start(context: Context, role: UserRole) {
+        fun start(context: Context, resetBaseline: Boolean = false) {
             val intent = Intent(context, NotificationMonitorService::class.java).apply {
-                putExtra(EXTRA_IS_ADMIN, role.canAccessApprovals())
+                putExtra(EXTRA_RESET_BASELINE, resetBaseline)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

@@ -31,44 +31,32 @@ import com.commspurx.mobile.ui.components.CommspurxTopBar
 fun ContractsScreen(
     viewModel: ContractsViewModel,
     connectionStatus: BackendConnectionStatus,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
+    embeddedInMainShell: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            CommspurxTopBar(
-                title = state.title,
-                subtitle = state.subtitle,
-                showBack = true,
-                onBack = onBack,
-                connectionStatus = connectionStatus,
-            )
-        },
-    ) { padding ->
+    val listContent: @Composable (Modifier) -> Unit = { contentModifier ->
         if (state.contracts.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = if (state.isOfflineData) {
-                            "No cached contracts. Connect to load expiring contracts."
-                        } else {
-                            "No open contracts expiring in the next 7 days."
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            Column(
+                modifier = contentModifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = if (state.isOfflineData) {
+                        "No cached contracts. Connect to load pending contracts."
+                    } else {
+                        "No pending contracts in the next 7 days."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = contentModifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -86,6 +74,24 @@ fun ContractsScreen(
                     ContractListCard(contract)
                 }
             }
+        }
+    }
+
+    if (embeddedInMainShell) {
+        listContent(Modifier)
+    } else {
+        Scaffold(
+            topBar = {
+                CommspurxTopBar(
+                    title = state.title,
+                    subtitle = state.subtitle,
+                    showBack = true,
+                    onBack = onBack,
+                    connectionStatus = connectionStatus,
+                )
+            },
+        ) { padding ->
+            listContent(Modifier.padding(padding))
         }
     }
 }

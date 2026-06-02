@@ -1,11 +1,14 @@
 package com.commspurx.mobile
 
 import android.app.Application
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.commspurx.mobile.data.local.CommspurxDatabase
 import com.commspurx.mobile.data.local.BadgeStore
+import com.commspurx.mobile.data.local.MonitorSeenStore
 import com.commspurx.mobile.data.local.SessionStore
 import com.commspurx.mobile.data.model.AuthUser
-import com.commspurx.mobile.data.model.UserRole
 import com.commspurx.mobile.data.repository.ApprovalsRepository
 import com.commspurx.mobile.data.repository.AuthRepository
 import com.commspurx.mobile.data.repository.BulkImportRepository
@@ -17,13 +20,18 @@ import com.commspurx.mobile.data.repository.PurchaseContractsRepository
 import com.commspurx.mobile.data.repository.SalesContractsRepository
 import com.commspurx.mobile.network.ApiClient
 import com.commspurx.mobile.network.ConnectivityMonitor
-import com.commspurx.mobile.notifications.NotificationMonitorService
+import com.commspurx.mobile.network.TokenProvider
+import com.commspurx.mobile.notifications.NotificationMonitorScheduler
+import com.commspurx.mobile.notifications.NotificationPollManager
 
 class CommspurxApplication : Application() {
     lateinit var sessionStore: SessionStore
         private set
 
     lateinit var badgeStore: BadgeStore
+        private set
+
+    lateinit var monitorSeenStore: MonitorSeenStore
         private set
 
     lateinit var database: CommspurxDatabase
@@ -55,14 +63,17 @@ class CommspurxApplication : Application() {
 
     private lateinit var cachedNotificationsRepository: CachedNotificationsRepository
     private lateinit var cachedDeliveriesRepository: CachedDeliveriesRepository
+    private lateinit var tokenProvider: TokenProvider
 
     override fun onCreate() {
         super.onCreate()
         sessionStore = SessionStore(this)
         badgeStore = BadgeStore(this)
+        monitorSeenStore = MonitorSeenStore(this)
         database = CommspurxDatabase.get(this)
 
         val apiClient = ApiClient(sessionStore)
+        tokenProvider = apiClient.getTokenProvider()
         connectivityMonitor = ConnectivityMonitor(this, apiClient.healthApi)
 
         cachedNotificationsRepository = CachedNotificationsRepository(
@@ -80,7 +91,7 @@ class CommspurxApplication : Application() {
             authApi = apiClient.authApi,
             refreshAuthApi = apiClient.refreshAuthApi,
             sessionStore = sessionStore,
-            tokenProvider = apiClient.getTokenProvider(),
+            tokenProvider = tokenProvider,
         )
         notificationsRepository = NotificationsRepository(cachedNotificationsRepository)
         approvalsRepository = ApprovalsRepository(apiClient.approvalsApi)
@@ -96,15 +107,61 @@ class CommspurxApplication : Application() {
             database = database,
             connectivityMonitor = connectivityMonitor,
         )
+
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    if (sessionStore.getRefreshToken() == null) return
+                    NotificationMonitorScheduler.ensureRunning(
+                        context = this@CommspurxApplication,
+                        resetBaseline = false,
+                        fromForeground = true,
+                    )
+                    NotificationPollManager.schedulePoll(
+                        context = this@CommspurxApplication,
+                        resetBaseline = false,
+                        debounce = true,
+                    )
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    if (sessionStore.getRefreshToken() == null) return
+                    NotificationMonitorScheduler.armBackgroundPolling(this@CommspurxApplication)
+                    NotificationMonitorScheduler.enqueueBackgroundPoll(this@CommspurxApplication)
+                }
+            },
+        )
+
+        if (sessionStore.getRefreshToken() != null) {
+            NotificationMonitorScheduler.armBackgroundPolling(this)
+        }
     }
 
-    fun startNotificationMonitor(user: AuthUser) {
+    fun syncAuthTokenFromStore() {
+        tokenProvider.syncFromStore()
+    }
+
+    fun startNotificationMonitor(user: AuthUser, resetBaseline: Boolean = false) {
         if (sessionStore.getRefreshToken() == null) return
-        val role = UserRole.from(user.role) ?: return
-        NotificationMonitorService.start(this, role)
+        syncAuthTokenFromStore()
+        NotificationMonitorScheduler.ensureRunning(
+            context = this,
+            resetBaseline = resetBaseline,
+            fromForeground = true,
+        )
+        if (resetBaseline) {
+            NotificationPollManager.schedulePoll(this, resetBaseline = true, debounce = false)
+        }
+    }
+
+    /** After hub sync — detect new items without re-alerting acknowledged ones. */
+    fun requestNotificationPoll() {
+        if (sessionStore.getRefreshToken() == null) return
+        syncAuthTokenFromStore()
+        NotificationPollManager.schedulePoll(this, resetBaseline = false, debounce = true)
     }
 
     fun stopNotificationMonitor() {
-        NotificationMonitorService.stop(this)
+        NotificationMonitorScheduler.stop(this)
     }
 }

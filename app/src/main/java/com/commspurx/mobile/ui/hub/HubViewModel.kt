@@ -16,6 +16,7 @@ import com.commspurx.mobile.data.repository.NotificationsRepository
 import com.commspurx.mobile.data.repository.PurchaseContractsRepository
 import com.commspurx.mobile.data.repository.SalesContractsRepository
 import com.commspurx.mobile.notifications.MonitorState
+import com.commspurx.mobile.ui.main.MainTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +32,8 @@ data class HubUiState(
     val notificationBadgeCount: Int = 0,
     val hasUrgentNotifications: Boolean = false,
     val deliveryBadgeCount: Int = 0,
+    val purchaseBadgeCount: Int = 0,
+    val salesBadgeCount: Int = 0,
     val purchaseExpiringCount: Int = 0,
     val salesExpiringCount: Int = 0,
     val showLogoutConfirm: Boolean = false,
@@ -50,6 +53,7 @@ class HubViewModel(
     private val salesContractsRepository: SalesContractsRepository,
     private val badgeStore: BadgeStore,
     private val stopNotificationMonitor: () -> Unit,
+    private val onDataSynced: () -> Unit,
     private val onLoggedOut: () -> Unit,
 ) : ViewModel() {
     private val accountId = user.accountId
@@ -57,6 +61,8 @@ class HubViewModel(
     val uiState: StateFlow<HubUiState> = _uiState.asStateFlow()
 
     private var currentDeliveryIds: List<String> = emptyList()
+    private var purchaseContractIds: List<String> = emptyList()
+    private var salesContractIds: List<String> = emptyList()
     private var notificationIds: List<String> = emptyList()
     private var hasUrgentNotifications: Boolean = false
     private var approvalKeys: List<String> = emptyList()
@@ -79,6 +85,35 @@ class HubViewModel(
     fun markDeliveriesSectionOpened() {
         badgeStore.markHubDeliveriesSeen(currentDeliveryIds)
         _uiState.update { it.withBadgeCounts() }
+    }
+
+    fun markPurchaseSectionOpened() {
+        badgeStore.markMainTabPurchaseSeen(purchaseContractIds)
+        _uiState.update { it.withBadgeCounts() }
+    }
+
+    fun markSalesSectionOpened() {
+        badgeStore.markMainTabSalesSeen(salesContractIds)
+        _uiState.update { it.withBadgeCounts() }
+    }
+
+    fun markNotificationsSectionOpened() {
+        val approvalKeysList = if (_uiState.value.showApprovalsBadge) approvalKeys else emptyList()
+        badgeStore.markHubNotificationsSeen(
+            notificationIds = notificationIds,
+            approvalKeys = approvalKeysList,
+        )
+        _uiState.update { it.withBadgeCounts() }
+    }
+
+    /** Clears the bottom-nav badge for [tab] when the user opens that section. */
+    fun markMainTabVisited(tab: MainTab) {
+        when (tab) {
+            MainTab.Deliveries -> markDeliveriesSectionOpened()
+            MainTab.Purchase -> markPurchaseSectionOpened()
+            MainTab.Sales -> markSalesSectionOpened()
+            MainTab.Notifications -> markNotificationsSectionOpened()
+        }
     }
 
     fun requestLogout() {
@@ -115,12 +150,18 @@ class HubViewModel(
         }
         viewModelScope.launch {
             purchaseContractsRepository.observeExpiring(accountId).collect { contracts ->
-                _uiState.update { it.copy(purchaseExpiringCount = contracts.size) }
+                purchaseContractIds = contracts.map { it.id }
+                _uiState.update {
+                    it.copy(purchaseExpiringCount = contracts.size).withBadgeCounts()
+                }
             }
         }
         viewModelScope.launch {
             salesContractsRepository.observeExpiring(accountId).collect { contracts ->
-                _uiState.update { it.copy(salesExpiringCount = contracts.size) }
+                salesContractIds = contracts.map { it.id }
+                _uiState.update {
+                    it.copy(salesExpiringCount = contracts.size).withBadgeCounts()
+                }
             }
         }
     }
@@ -140,7 +181,18 @@ class HubViewModel(
                     _uiState.update {
                         it.copy(
                             pendingApprovals = snapshot.approvals.size,
-                            pendingDeliveries = currentDeliveryIds.size,
+                            pendingDeliveries = snapshot.pendingDeliveries.size,
+                            purchaseExpiringCount = snapshot.pendingPurchaseContracts.size,
+                            salesExpiringCount = snapshot.pendingSalesContracts.size,
+                        ).withBadgeCounts()
+                    }
+                } else {
+                    purchaseContractIds = snapshot.pendingPurchaseContracts.map { it.id }
+                    salesContractIds = snapshot.pendingSalesContracts.map { it.id }
+                    _uiState.update {
+                        it.copy(
+                            purchaseExpiringCount = snapshot.pendingPurchaseContracts.size,
+                            salesExpiringCount = snapshot.pendingSalesContracts.size,
                         ).withBadgeCounts()
                     }
                 }
@@ -161,6 +213,7 @@ class HubViewModel(
             runCatching { deliveriesRepository.listCurrent(accountId) }
             runCatching { purchaseContractsRepository.load(accountId) }
             runCatching { salesContractsRepository.load(accountId) }
+            onDataSynced()
         }
     }
 
@@ -199,5 +252,7 @@ class HubViewModel(
             ),
             hasUrgentNotifications = hasUrgentNotifications,
             deliveryBadgeCount = badgeStore.hubDeliveryBadge(currentDeliveryIds),
+            purchaseBadgeCount = badgeStore.mainTabPurchaseBadge(purchaseContractIds),
+            salesBadgeCount = badgeStore.mainTabSalesBadge(salesContractIds),
         )
 }

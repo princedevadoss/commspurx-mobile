@@ -28,6 +28,8 @@ class NotificationsRepository(
     suspend fun markAllRead(accountId: String) {
         cached.markAllRead(accountId)
     }
+
+    suspend fun refresh(accountId: String): Boolean = cached.refresh(accountId)
 }
 
 class ApprovalsRepository(
@@ -35,6 +37,12 @@ class ApprovalsRepository(
 ) {
     suspend fun listPending(): List<ApprovalItem> =
         runCatching { approvalsApi.listPending().data }.getOrDefault(emptyList())
+
+    suspend fun refreshPending(): Boolean =
+        runCatching {
+            approvalsApi.listPending()
+            true
+        }.getOrDefault(false)
 
     suspend fun decide(entityType: String, entityId: String, action: String) {
         approvalsApi.decide(entityType, entityId, DecideApprovalRequest(action))

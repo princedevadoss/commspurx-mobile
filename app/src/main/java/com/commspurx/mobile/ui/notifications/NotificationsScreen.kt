@@ -57,7 +57,8 @@ import java.time.format.DateTimeFormatter
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
     connectionStatus: BackendConnectionStatus,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
+    embeddedInMainShell: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -86,23 +87,8 @@ fun NotificationsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            CommspurxTopBar(
-                title = "Notifications",
-                subtitle = state.account?.name ?: state.user.email,
-                showBack = true,
-                onBack = onBack,
-                connectionStatus = connectionStatus,
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
+    val body: @Composable (Modifier) -> Unit = { contentModifier ->
+        Column(modifier = contentModifier.fillMaxSize()) {
             if (state.showApprovalsTab) {
                 TabRow(selectedTabIndex = selectedTab) {
                     Tab(
@@ -148,6 +134,25 @@ fun NotificationsScreen(
                     )
                 }
             }
+        }
+    }
+
+    if (embeddedInMainShell) {
+        body(Modifier)
+    } else {
+        Scaffold(
+            topBar = {
+                CommspurxTopBar(
+                    title = "Notifications",
+                    subtitle = state.account?.name ?: state.user.email,
+                    showBack = true,
+                    onBack = onBack,
+                    connectionStatus = connectionStatus,
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            body(Modifier.padding(padding))
         }
     }
 }

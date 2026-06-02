@@ -71,7 +71,7 @@ fun LoginScreen(viewModel: LoginViewModel) {
                     modifier = Modifier.padding(top = 20.dp),
                 )
                 Text(
-                    text = "Stay on top of approvals, deliveries, and contract deadlines",
+                    text = "Operations dashboard for deliveries, contracts, and alerts",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp, bottom = 28.dp),

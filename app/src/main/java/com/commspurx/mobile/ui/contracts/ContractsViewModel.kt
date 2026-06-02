@@ -60,8 +60,8 @@ data class ContractsUiState(
     val errorMessage: String? = null,
 ) {
     val title: String = when (kind) {
-        ContractListKind.PurchaseExpiring -> "Purchase contracts expiring"
-        ContractListKind.SalesExpiring -> "Sales contracts expiring"
+        ContractListKind.PurchaseExpiring -> "Pending purchase contracts"
+        ContractListKind.SalesExpiring -> "Pending sales contracts"
     }
 
     val subtitle: String = "Open contracts ending within 7 days"

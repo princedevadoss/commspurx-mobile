@@ -31,6 +31,20 @@ class BadgeStore(context: Context) {
         mergeInto(KEY_HUB_DELIVERIES, deliveryIds)
     }
 
+    fun mainTabPurchaseBadge(contractIds: Collection<String>): Int =
+        contractIds.count { it !in readSet(KEY_MAIN_TAB_PURCHASE) }
+
+    fun markMainTabPurchaseSeen(contractIds: Collection<String>) {
+        mergeInto(KEY_MAIN_TAB_PURCHASE, contractIds)
+    }
+
+    fun mainTabSalesBadge(contractIds: Collection<String>): Int =
+        contractIds.count { it !in readSet(KEY_MAIN_TAB_SALES) }
+
+    fun markMainTabSalesSeen(contractIds: Collection<String>) {
+        mergeInto(KEY_MAIN_TAB_SALES, contractIds)
+    }
+
     fun currentTabBadge(deliveryIds: Collection<String>): Int =
         deliveryIds.count { it !in readSet(KEY_CURRENT_TAB) }
 
@@ -94,6 +108,8 @@ class BadgeStore(context: Context) {
     }
 
     companion object {
+        private val KEY_MAIN_TAB_PURCHASE = stringPreferencesKey("main_tab_purchase_contract_ids")
+        private val KEY_MAIN_TAB_SALES = stringPreferencesKey("main_tab_sales_contract_ids")
         private val KEY_HUB_DELIVERIES = stringPreferencesKey("hub_delivery_ids")
         private val KEY_CURRENT_TAB = stringPreferencesKey("current_tab_delivery_ids")
         private val KEY_COMPLETED_TAB = stringPreferencesKey("completed_tab_delivery_ids")

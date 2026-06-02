@@ -3,6 +3,7 @@ package com.commspurx.mobile.ui.notifications
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.commspurx.mobile.data.local.BadgeStore
+import com.commspurx.mobile.data.local.MonitorSeenStore
 import com.commspurx.mobile.data.model.ApprovalItem
 import com.commspurx.mobile.data.model.AuthAccount
 import com.commspurx.mobile.data.model.AuthUser
@@ -50,6 +51,7 @@ class NotificationsViewModel(
     private val approvalsRepository: ApprovalsRepository,
     private val bulkImportRepository: BulkImportRepository,
     private val badgeStore: BadgeStore,
+    private val monitorSeenStore: MonitorSeenStore,
     private val onNavigateToDeliveries: () -> Unit,
 ) : ViewModel() {
     private val accountId = user.accountId
@@ -65,10 +67,16 @@ class NotificationsViewModel(
 
     fun markHubNotificationsSeen() {
         val state = _uiState.value
+        val approvalKeysList = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) }
+        val notificationIdsList = state.notifications.map { it.id }
         badgeStore.markHubNotificationsSeen(
-            notificationIds = state.notifications.map { it.id },
-            approvalKeys = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) },
+            notificationIds = notificationIdsList,
+            approvalKeys = approvalKeysList,
         )
+        viewModelScope.launch {
+            monitorSeenStore.markNotificationsSeen(notificationIdsList)
+            monitorSeenStore.markApprovalsSeen(approvalKeysList)
+        }
         markSelectedTabSeen()
     }
 
@@ -100,6 +108,10 @@ class NotificationsViewModel(
         viewModelScope.launch {
             try {
                 notificationsRepository.markRead(accountId, item.id)
+                monitorSeenStore.markNotificationsSeen(listOf(item.id))
+                if (item.entityType == "delivery" && item.title.contains("completed", ignoreCase = true)) {
+                    monitorSeenStore.markCompletedDeliveriesSeen(listOf(item.entityId))
+                }
                 _uiState.update { state ->
                     state.copy(
                         notifications = state.notifications.filter { it.id != item.id },
@@ -128,7 +140,9 @@ class NotificationsViewModel(
             _uiState.update { it.copy(isMarkingAllSeen = true, errorMessage = null) }
             try {
                 notificationsRepository.markAllRead(accountId)
-                badgeStore.markActivityTabSeen(notifications.map { it.id })
+                val ids = notifications.map { it.id }
+                badgeStore.markActivityTabSeen(ids)
+                monitorSeenStore.markNotificationsSeen(ids)
                 _uiState.update {
                     it.copy(
                         notifications = emptyList(),
@@ -165,6 +179,9 @@ class NotificationsViewModel(
             }
             try {
                 approvalsRepository.decide(item.entityType, item.id, action)
+                monitorSeenStore.markApprovalsSeen(
+                    listOf(BadgeStore.approvalKey(item.entityType, item.id)),
+                )
                 _uiState.update { state ->
                     state.copy(
                         approvals = state.approvals.filterNot {
@@ -231,6 +248,9 @@ class NotificationsViewModel(
                 markSelectedTabSeen()
             }
             DeepLinkTarget.Deliveries -> onNavigateToDeliveries()
+            DeepLinkTarget.PurchaseContracts,
+            DeepLinkTarget.SalesContracts,
+            -> Unit // Main shell switches tabs via MonitorState / AppNavigation
             is DeepLinkTarget.ActivityItem -> {
                 _uiState.update {
                     it.copy(selectedTab = if (it.showApprovalsTab) 1 else 0)
@@ -291,13 +311,27 @@ class NotificationsViewModel(
         val state = _uiState.value
         if (state.showApprovalsTab) {
             when (state.selectedTab) {
-                0 -> badgeStore.markApprovalsTabSeen(
-                    state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) },
-                )
-                else -> badgeStore.markActivityTabSeen(state.notifications.map { it.id })
+                0 -> {
+                    val keys = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) }
+                    badgeStore.markApprovalsTabSeen(keys)
+                    viewModelScope.launch {
+                        monitorSeenStore.markApprovalsSeen(keys)
+                    }
+                }
+                else -> {
+                    val ids = state.notifications.map { it.id }
+                    badgeStore.markActivityTabSeen(ids)
+                    viewModelScope.launch {
+                        monitorSeenStore.markNotificationsSeen(ids)
+                    }
+                }
             }
         } else {
-            badgeStore.markActivityTabSeen(state.notifications.map { it.id })
+            val ids = state.notifications.map { it.id }
+            badgeStore.markActivityTabSeen(ids)
+            viewModelScope.launch {
+                monitorSeenStore.markNotificationsSeen(ids)
+            }
         }
         refreshTabBadges()
     }

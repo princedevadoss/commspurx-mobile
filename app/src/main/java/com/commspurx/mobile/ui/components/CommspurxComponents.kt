@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.commspurx.mobile.network.BackendConnectionStatus
+import com.commspurx.mobile.ui.theme.AppShellGradientDark
+import com.commspurx.mobile.ui.theme.AppShellGradientLight
 import com.commspurx.mobile.ui.theme.BrandAccent
 import com.commspurx.mobile.ui.theme.ConnectedGreen
 import com.commspurx.mobile.ui.theme.OfflineRed
@@ -156,22 +158,24 @@ fun CommspurxTopBar(
 }
 
 @Composable
-fun HubGradientBackground(
+fun AppShellBackground(
     darkTheme: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val brush = if (darkTheme) {
-        com.commspurx.mobile.ui.theme.HubGradientDark
-    } else {
-        com.commspurx.mobile.ui.theme.HubGradientLight
-    }
-    Box(
-        modifier = modifier.background(brush),
-    ) {
+    val brush = if (darkTheme) AppShellGradientDark else AppShellGradientLight
+    Box(modifier = modifier.background(brush)) {
         content()
     }
 }
+
+/** @deprecated Use {@link AppShellBackground}. */
+@Composable
+fun HubGradientBackground(
+    darkTheme: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) = AppShellBackground(darkTheme, modifier, content)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
