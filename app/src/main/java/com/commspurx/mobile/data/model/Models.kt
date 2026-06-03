@@ -55,6 +55,12 @@ data class LogoutRequest(
 )
 
 @Serializable
+data class FcmTokenRequest(
+    val token: String,
+    val deviceLabel: String? = null,
+)
+
+@Serializable
 data class ApiErrorResponse(
     val error: String? = null,
     val code: String? = null,
@@ -77,6 +83,8 @@ data class NotificationItem(
 @Serializable
 data class NotificationsResponse(
     val data: List<NotificationItem> = emptyList(),
+    val meta: com.commspurx.mobile.data.model.PaginationMeta? = null,
+    val unreadCount: Int = 0,
 )
 
 @Serializable

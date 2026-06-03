@@ -17,7 +17,7 @@ object NotificationAlarmScheduler {
         if (app.sessionStore.getRefreshToken() == null) return
 
         val alarmManager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val triggerAt = SystemClock.elapsedRealtime() + NotificationMonitorScheduler.POLL_INTERVAL_MS
+        val triggerAt = SystemClock.elapsedRealtime() + NotificationMonitorScheduler.BACKGROUND_POLL_INTERVAL_MS
         val pendingIntent = pollPendingIntent(app)
 
         alarmManager.setAndAllowWhileIdle(

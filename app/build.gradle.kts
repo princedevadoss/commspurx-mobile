@@ -1,8 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun localProp(key: String): String =
+    localProperties.getProperty(key)?.replace("\\", "\\\\")?.replace("\"", "\\\"") ?: ""
+
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -23,7 +39,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Android emulator → host machine localhost
-        buildConfigField("String", "API_BASE_URL", "\"http://192.168.88.5:3000/api\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.88.6:3000/api\"")
+
+        // Optional when google-services.json is not used — set in local.properties (see MOBILE_PUSH_SETUP.md)
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${localProp("FIREBASE_API_KEY")}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${localProp("FIREBASE_APP_ID")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${localProp("FIREBASE_PROJECT_ID")}\"")
     }
 
     buildTypes {
@@ -49,6 +70,7 @@ android {
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
+    implementation(platform(libs.firebase.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
@@ -71,6 +93,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.firebase.messaging)
     ksp(libs.androidx.room.compiler)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     testImplementation(libs.junit)

@@ -88,6 +88,9 @@ class ConnectivityMonitor(
         }
     }
 
+    /** Live network check — use from background workers instead of [hasNetwork] StateFlow alone. */
+    fun hasNetworkNow(): Boolean = hasActiveNetwork()
+
     /** Call after a successful API sync — only when the device has validated internet. */
     fun noteBackendReachable() {
         if (_hasNetwork.value) {

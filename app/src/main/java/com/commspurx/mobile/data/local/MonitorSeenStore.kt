@@ -27,6 +27,9 @@ data class MonitorSeenState(
     val completedDeliveryIds: Set<String> = emptySet(),
     val purchaseContractIds: Set<String> = emptySet(),
     val salesContractIds: Set<String> = emptySet(),
+    /** Count watermark when expiring lists are large (avoids storing hundreds of IDs). */
+    val purchaseExpiringSeenCount: Int = 0,
+    val salesExpiringSeenCount: Int = 0,
 )
 
 /**

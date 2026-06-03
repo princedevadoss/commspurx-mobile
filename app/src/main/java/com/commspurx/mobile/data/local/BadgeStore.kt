@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -16,107 +18,206 @@ private val Context.badgeDataStore: DataStore<Preferences> by preferencesDataSto
     name = "commspurx_badges",
 )
 
+@Serializable
+private data class IdSetSnapshot(val ids: Set<String> = emptySet())
+
 /**
- * Persists which items the user has already seen so badge pills stay cleared
- * across navigation and app restarts until genuinely new items arrive.
+ * Persists seen-state for hub/tab badges. Uses count watermarks for large contract lists
+ * (avoids storing hundreds of UUIDs). Never blocks the main thread.
  */
 class BadgeStore(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val dataStore = context.applicationContext.badgeDataStore
+    private val mutex = Mutex()
 
-    fun hubDeliveryBadge(deliveryIds: Collection<String>): Int =
-        deliveryIds.count { it !in readSet(KEY_HUB_DELIVERIES) }
+    private var purchaseSeenCount = 0
+    private var salesSeenCount = 0
+    private var hubDeliveries = emptySet<String>()
+    private var currentTabDeliveries = emptySet<String>()
+    private var completedTabDeliveries = emptySet<String>()
+    private var hubNotifications = emptySet<String>()
+    private var hubApprovals = emptySet<String>()
+    private var approvalsTab = emptySet<String>()
+    private var activityTab = emptySet<String>()
+    private var loaded = false
 
-    fun markHubDeliveriesSeen(deliveryIds: Collection<String>) {
-        mergeInto(KEY_HUB_DELIVERIES, deliveryIds)
+    suspend fun hubDeliveryBadge(deliveryIds: Collection<String>): Int = mutex.withLock {
+        ensureLoaded()
+        countUnseen(deliveryIds, hubDeliveries)
     }
 
-    fun mainTabPurchaseBadge(contractIds: Collection<String>): Int =
-        contractIds.count { it !in readSet(KEY_MAIN_TAB_PURCHASE) }
-
-    fun markMainTabPurchaseSeen(contractIds: Collection<String>) {
-        mergeInto(KEY_MAIN_TAB_PURCHASE, contractIds)
+    suspend fun markHubDeliveriesSeen(deliveryIds: Collection<String>) = mutex.withLock {
+        ensureLoaded()
+        hubDeliveries = hubDeliveries + deliveryIds
+        persist()
     }
 
-    fun mainTabSalesBadge(contractIds: Collection<String>): Int =
-        contractIds.count { it !in readSet(KEY_MAIN_TAB_SALES) }
-
-    fun markMainTabSalesSeen(contractIds: Collection<String>) {
-        mergeInto(KEY_MAIN_TAB_SALES, contractIds)
+    suspend fun mainTabPurchaseUnseen(currentCount: Int): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.unseen(currentCount, purchaseSeenCount)
     }
 
-    fun currentTabBadge(deliveryIds: Collection<String>): Int =
-        deliveryIds.count { it !in readSet(KEY_CURRENT_TAB) }
-
-    fun markCurrentTabSeen(deliveryIds: Collection<String>) {
-        mergeInto(KEY_CURRENT_TAB, deliveryIds)
+    suspend fun mainTabPurchaseBadge(currentCount: Int): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.badgeValue(BadgeCounts.unseen(currentCount, purchaseSeenCount))
     }
 
-    fun completedTabBadge(deliveryIds: Collection<String>): Int =
-        deliveryIds.count { it !in readSet(KEY_COMPLETED_TAB) }
-
-    fun markCompletedTabSeen(deliveryIds: Collection<String>) {
-        mergeInto(KEY_COMPLETED_TAB, deliveryIds)
+    suspend fun markMainTabPurchaseSeen(currentCount: Int) = mutex.withLock {
+        ensureLoaded()
+        purchaseSeenCount = currentCount
+        persist()
     }
 
-    fun hubNotificationBadge(
+    suspend fun mainTabSalesUnseen(currentCount: Int): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.unseen(currentCount, salesSeenCount)
+    }
+
+    suspend fun mainTabSalesBadge(currentCount: Int): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.badgeValue(BadgeCounts.unseen(currentCount, salesSeenCount))
+    }
+
+    suspend fun markMainTabSalesSeen(currentCount: Int) = mutex.withLock {
+        ensureLoaded()
+        salesSeenCount = currentCount
+        persist()
+    }
+
+    suspend fun currentTabBadge(deliveryIds: Collection<String>): Int = mutex.withLock {
+        ensureLoaded()
+        countUnseen(deliveryIds, currentTabDeliveries)
+    }
+
+    suspend fun markCurrentTabSeen(deliveryIds: Collection<String>) = mutex.withLock {
+        ensureLoaded()
+        currentTabDeliveries = currentTabDeliveries + deliveryIds
+        persist()
+    }
+
+    suspend fun completedTabBadge(deliveryIds: Collection<String>): Int = mutex.withLock {
+        ensureLoaded()
+        countUnseen(deliveryIds, completedTabDeliveries)
+    }
+
+    suspend fun markCompletedTabSeen(deliveryIds: Collection<String>) = mutex.withLock {
+        ensureLoaded()
+        completedTabDeliveries = completedTabDeliveries + deliveryIds
+        persist()
+    }
+
+    suspend fun hubNotificationUnseen(
         notificationIds: Collection<String>,
         approvalKeys: Collection<String>,
-    ): Int =
-        notificationIds.count { it !in readSet(KEY_NOTIFICATIONS) } +
-            approvalKeys.count { it !in readSet(KEY_APPROVALS) }
+    ): Int = mutex.withLock {
+        ensureLoaded()
+        countUnseen(notificationIds, hubNotifications) +
+            countUnseen(approvalKeys, hubApprovals)
+    }
 
-    fun markHubNotificationsSeen(
+    suspend fun hubNotificationBadge(
         notificationIds: Collection<String>,
         approvalKeys: Collection<String>,
-    ) {
-        mergeInto(KEY_NOTIFICATIONS, notificationIds)
-        mergeInto(KEY_APPROVALS, approvalKeys)
+    ): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.badgeValue(
+            countUnseen(notificationIds, hubNotifications) +
+                countUnseen(approvalKeys, hubApprovals),
+        )
     }
 
-    fun approvalsTabBadge(approvalKeys: Collection<String>): Int =
-        approvalKeys.count { it !in readSet(KEY_NOTIFICATIONS_APPROVALS_TAB) }
-
-    fun markApprovalsTabSeen(approvalKeys: Collection<String>) {
-        mergeInto(KEY_NOTIFICATIONS_APPROVALS_TAB, approvalKeys)
+    suspend fun markHubNotificationsSeen(
+        notificationIds: Collection<String>,
+        approvalKeys: Collection<String>,
+    ) = mutex.withLock {
+        ensureLoaded()
+        hubNotifications = hubNotifications + notificationIds
+        hubApprovals = hubApprovals + approvalKeys
+        persist()
     }
 
-    fun activityTabBadge(notificationIds: Collection<String>): Int =
-        notificationIds.count { it !in readSet(KEY_NOTIFICATIONS_ACTIVITY_TAB) }
-
-    fun markActivityTabSeen(notificationIds: Collection<String>) {
-        mergeInto(KEY_NOTIFICATIONS_ACTIVITY_TAB, notificationIds)
+    suspend fun approvalsTabBadge(approvalKeys: Collection<String>): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.badgeValue(countUnseen(approvalKeys, approvalsTab))
     }
 
-    fun clear() = runBlocking {
+    suspend fun markApprovalsTabSeen(approvalKeys: Collection<String>) = mutex.withLock {
+        ensureLoaded()
+        approvalsTab = approvalsTab + approvalKeys
+        persist()
+    }
+
+    suspend fun activityTabBadge(notificationIds: Collection<String>): Int = mutex.withLock {
+        ensureLoaded()
+        BadgeCounts.badgeValue(countUnseen(notificationIds, activityTab))
+    }
+
+    suspend fun markActivityTabSeen(notificationIds: Collection<String>) = mutex.withLock {
+        ensureLoaded()
+        activityTab = activityTab + notificationIds
+        persist()
+    }
+
+    suspend fun clear() = mutex.withLock {
         dataStore.edit { it.clear() }
+        purchaseSeenCount = 0
+        salesSeenCount = 0
+        hubDeliveries = emptySet()
+        currentTabDeliveries = emptySet()
+        completedTabDeliveries = emptySet()
+        hubNotifications = emptySet()
+        hubApprovals = emptySet()
+        approvalsTab = emptySet()
+        activityTab = emptySet()
+        loaded = true
     }
 
-    private fun readSet(key: Preferences.Key<String>): Set<String> = runBlocking {
-        val raw = dataStore.data.map { it[key] }.first() ?: return@runBlocking emptySet()
-        runCatching { json.decodeFromString<Set<String>>(raw) }.getOrDefault(emptySet())
+    private suspend fun ensureLoaded() {
+        if (loaded) return
+        val prefs = dataStore.data.first()
+        purchaseSeenCount = prefs[KEY_PURCHASE_SEEN_COUNT] ?: 0
+        salesSeenCount = prefs[KEY_SALES_SEEN_COUNT] ?: 0
+        hubDeliveries = decodeSet(prefs[KEY_HUB_DELIVERIES])
+        currentTabDeliveries = decodeSet(prefs[KEY_CURRENT_TAB])
+        completedTabDeliveries = decodeSet(prefs[KEY_COMPLETED_TAB])
+        hubNotifications = decodeSet(prefs[KEY_NOTIFICATIONS])
+        hubApprovals = decodeSet(prefs[KEY_APPROVALS])
+        approvalsTab = decodeSet(prefs[KEY_APPROVALS_TAB])
+        activityTab = decodeSet(prefs[KEY_ACTIVITY_TAB])
+        loaded = true
     }
 
-    private fun mergeInto(key: Preferences.Key<String>, ids: Collection<String>) {
-        if (ids.isEmpty()) return
-        runBlocking {
-            val merged = readSet(key).toMutableSet().apply { addAll(ids) }
-            dataStore.edit { prefs ->
-                prefs[key] = json.encodeToString(merged)
-            }
+    private fun decodeSet(raw: String?): Set<String> =
+        raw?.let { runCatching { json.decodeFromString<IdSetSnapshot>(it).ids }.getOrNull() }
+            ?: emptySet()
+
+    private suspend fun persist() {
+        dataStore.edit { prefs ->
+            prefs[KEY_PURCHASE_SEEN_COUNT] = purchaseSeenCount
+            prefs[KEY_SALES_SEEN_COUNT] = salesSeenCount
+            prefs[KEY_HUB_DELIVERIES] = json.encodeToString(IdSetSnapshot(hubDeliveries))
+            prefs[KEY_CURRENT_TAB] = json.encodeToString(IdSetSnapshot(currentTabDeliveries))
+            prefs[KEY_COMPLETED_TAB] = json.encodeToString(IdSetSnapshot(completedTabDeliveries))
+            prefs[KEY_NOTIFICATIONS] = json.encodeToString(IdSetSnapshot(hubNotifications))
+            prefs[KEY_APPROVALS] = json.encodeToString(IdSetSnapshot(hubApprovals))
+            prefs[KEY_APPROVALS_TAB] = json.encodeToString(IdSetSnapshot(approvalsTab))
+            prefs[KEY_ACTIVITY_TAB] = json.encodeToString(IdSetSnapshot(activityTab))
         }
     }
 
+    private fun countUnseen(ids: Collection<String>, seen: Set<String>): Int =
+        ids.count { it !in seen }
+
     companion object {
-        private val KEY_MAIN_TAB_PURCHASE = stringPreferencesKey("main_tab_purchase_contract_ids")
-        private val KEY_MAIN_TAB_SALES = stringPreferencesKey("main_tab_sales_contract_ids")
+        private val KEY_PURCHASE_SEEN_COUNT = intPreferencesKey("purchase_seen_count")
+        private val KEY_SALES_SEEN_COUNT = intPreferencesKey("sales_seen_count")
         private val KEY_HUB_DELIVERIES = stringPreferencesKey("hub_delivery_ids")
         private val KEY_CURRENT_TAB = stringPreferencesKey("current_tab_delivery_ids")
         private val KEY_COMPLETED_TAB = stringPreferencesKey("completed_tab_delivery_ids")
         private val KEY_NOTIFICATIONS = stringPreferencesKey("hub_notification_ids")
         private val KEY_APPROVALS = stringPreferencesKey("hub_approval_keys")
-        private val KEY_NOTIFICATIONS_APPROVALS_TAB = stringPreferencesKey("approvals_tab_keys")
-        private val KEY_NOTIFICATIONS_ACTIVITY_TAB = stringPreferencesKey("activity_tab_notification_ids")
+        private val KEY_APPROVALS_TAB = stringPreferencesKey("approvals_tab_keys")
+        private val KEY_ACTIVITY_TAB = stringPreferencesKey("activity_tab_notification_ids")
 
         fun approvalKey(entityType: String, id: String): String = "$entityType:$id"
     }

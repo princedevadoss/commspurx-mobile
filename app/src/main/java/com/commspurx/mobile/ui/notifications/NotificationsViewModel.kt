@@ -66,18 +66,18 @@ class NotificationsViewModel(
     }
 
     fun markHubNotificationsSeen() {
-        val state = _uiState.value
-        val approvalKeysList = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) }
-        val notificationIdsList = state.notifications.map { it.id }
-        badgeStore.markHubNotificationsSeen(
-            notificationIds = notificationIdsList,
-            approvalKeys = approvalKeysList,
-        )
         viewModelScope.launch {
+            val state = _uiState.value
+            val approvalKeysList = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) }
+            val notificationIdsList = state.notifications.map { it.id }
+            badgeStore.markHubNotificationsSeen(
+                notificationIds = notificationIdsList,
+                approvalKeys = approvalKeysList,
+            )
             monitorSeenStore.markNotificationsSeen(notificationIdsList)
             monitorSeenStore.markApprovalsSeen(approvalKeysList)
+            markSelectedTabSeen()
         }
-        markSelectedTabSeen()
     }
 
     fun refresh() {
@@ -308,35 +308,33 @@ class NotificationsViewModel(
     }
 
     private fun markSelectedTabSeen() {
+        viewModelScope.launch { markSelectedTabSeenSuspend() }
+    }
+
+    private suspend fun markSelectedTabSeenSuspend() {
         val state = _uiState.value
         if (state.showApprovalsTab) {
             when (state.selectedTab) {
                 0 -> {
                     val keys = state.approvals.map { BadgeStore.approvalKey(it.entityType, it.id) }
                     badgeStore.markApprovalsTabSeen(keys)
-                    viewModelScope.launch {
-                        monitorSeenStore.markApprovalsSeen(keys)
-                    }
+                    monitorSeenStore.markApprovalsSeen(keys)
                 }
                 else -> {
                     val ids = state.notifications.map { it.id }
                     badgeStore.markActivityTabSeen(ids)
-                    viewModelScope.launch {
-                        monitorSeenStore.markNotificationsSeen(ids)
-                    }
+                    monitorSeenStore.markNotificationsSeen(ids)
                 }
             }
         } else {
             val ids = state.notifications.map { it.id }
             badgeStore.markActivityTabSeen(ids)
-            viewModelScope.launch {
-                monitorSeenStore.markNotificationsSeen(ids)
-            }
+            monitorSeenStore.markNotificationsSeen(ids)
         }
         refreshTabBadges()
     }
 
-    private fun refreshTabBadges() {
+    private suspend fun refreshTabBadges() {
         val state = _uiState.value
         _uiState.update {
             it.copy(

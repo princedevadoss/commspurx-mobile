@@ -93,7 +93,7 @@ class NotificationMonitorService : LifecycleService() {
 
     companion object {
         private const val EXTRA_RESET_BASELINE = "reset_baseline"
-        private val POLL_INTERVAL_MS = NotificationMonitorScheduler.POLL_INTERVAL_MS
+        private val POLL_INTERVAL_MS = NotificationMonitorScheduler.FOREGROUND_POLL_INTERVAL_MS
 
         fun start(context: Context, resetBaseline: Boolean = false) {
             val intent = Intent(context, NotificationMonitorService::class.java).apply {

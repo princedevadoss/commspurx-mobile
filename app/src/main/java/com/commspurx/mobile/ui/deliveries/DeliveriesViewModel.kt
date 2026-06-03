@@ -64,15 +64,15 @@ class DeliveriesViewModel(
         val state = _uiState.value
         val currentIds = state.currentDeliveries.map { it.id }
         val completedIds = state.completedDeliveries.map { it.id }
-        badgeStore.markHubDeliveriesSeen(currentIds)
-        badgeStore.markCurrentTabSeen(currentIds)
         viewModelScope.launch {
+            badgeStore.markHubDeliveriesSeen(currentIds)
+            badgeStore.markCurrentTabSeen(currentIds)
             monitorSeenStore.markPendingDeliveriesSeen(currentIds)
             if (state.selectedTab == DeliveryTab.Completed) {
                 monitorSeenStore.markCompletedDeliveriesSeen(completedIds)
             }
+            refreshTabBadges()
         }
-        refreshTabBadges()
     }
 
     fun refresh() {
@@ -140,28 +140,26 @@ class DeliveriesViewModel(
     }
 
     private fun markSelectedTabSeen() {
-        val state = _uiState.value
-        when (state.selectedTab) {
-            DeliveryTab.Current -> {
-                val ids = state.currentDeliveries.map { it.id }
-                badgeStore.markHubDeliveriesSeen(ids)
-                badgeStore.markCurrentTabSeen(ids)
-                viewModelScope.launch {
+        viewModelScope.launch {
+            val state = _uiState.value
+            when (state.selectedTab) {
+                DeliveryTab.Current -> {
+                    val ids = state.currentDeliveries.map { it.id }
+                    badgeStore.markHubDeliveriesSeen(ids)
+                    badgeStore.markCurrentTabSeen(ids)
                     monitorSeenStore.markPendingDeliveriesSeen(ids)
                 }
-            }
-            DeliveryTab.Completed -> {
-                val ids = state.completedDeliveries.map { it.id }
-                badgeStore.markCompletedTabSeen(ids)
-                viewModelScope.launch {
+                DeliveryTab.Completed -> {
+                    val ids = state.completedDeliveries.map { it.id }
+                    badgeStore.markCompletedTabSeen(ids)
                     monitorSeenStore.markCompletedDeliveriesSeen(ids)
                 }
             }
+            refreshTabBadges()
         }
-        refreshTabBadges()
     }
 
-    private fun refreshTabBadges() {
+    private suspend fun refreshTabBadges() {
         val state = _uiState.value
         val currentIds = state.currentDeliveries.map { it.id }
         val completedIds = state.completedDeliveries.map { it.id }

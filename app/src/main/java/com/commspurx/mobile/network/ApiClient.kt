@@ -7,6 +7,7 @@ import com.commspurx.mobile.data.api.BulkImportApi
 import com.commspurx.mobile.data.api.ContractsApi
 import com.commspurx.mobile.data.api.DeliveriesApi
 import com.commspurx.mobile.data.api.HealthApi
+import com.commspurx.mobile.data.api.MobilePushApi
 import com.commspurx.mobile.data.api.NotificationsApi
 import com.commspurx.mobile.data.local.SessionStore
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -64,7 +65,8 @@ class ApiClient(sessionStore: SessionStore) {
             if (BuildConfig.DEBUG) {
                 addInterceptor(
                     HttpLoggingInterceptor().apply {
-                        level = HttpLoggingInterceptor.Level.BODY
+                        // Never log response bodies — expiring-soon payloads can be large and OOM the app.
+                        level = HttpLoggingInterceptor.Level.HEADERS
                     },
                 )
             }
@@ -91,6 +93,7 @@ class ApiClient(sessionStore: SessionStore) {
     val bulkImportApi: BulkImportApi = retrofit.create(BulkImportApi::class.java)
     val deliveriesApi: DeliveriesApi = retrofit.create(DeliveriesApi::class.java)
     val contractsApi: ContractsApi = retrofit.create(ContractsApi::class.java)
+    val mobilePushApi: MobilePushApi = retrofit.create(MobilePushApi::class.java)
 
     private fun String.ensureTrailingSlash(): String =
         if (endsWith("/")) this else "$this/"

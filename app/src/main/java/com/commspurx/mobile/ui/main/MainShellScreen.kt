@@ -193,7 +193,13 @@ fun MainShellScreen(
                                 badge = {
                                     if (badgeCount > 0) {
                                         Badge {
-                                            Text(badgeCount.coerceAtMost(99).toString())
+                                            val label = when (tab) {
+                                                MainTab.Purchase -> shellState.purchaseBadgeLabel
+                                                MainTab.Sales -> shellState.salesBadgeLabel
+                                                MainTab.Notifications -> shellState.notificationBadgeLabel
+                                                else -> badgeCount.coerceAtMost(99).toString()
+                                            }
+                                            Text(label.ifBlank { badgeCount.toString() })
                                         }
                                     }
                                 },

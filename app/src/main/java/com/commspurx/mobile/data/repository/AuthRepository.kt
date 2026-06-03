@@ -9,10 +9,13 @@ import com.commspurx.mobile.data.model.LogoutRequest
 import com.commspurx.mobile.data.model.RefreshRequest
 import com.commspurx.mobile.data.model.SessionSnapshot
 import com.commspurx.mobile.data.model.UserRole
+import android.content.Context
+import com.commspurx.mobile.notifications.FcmTokenRegistrar
 import com.commspurx.mobile.network.TokenProvider
 import retrofit2.HttpException
 
 class AuthRepository(
+    private val appContext: Context,
     private val authApi: AuthApi,
     private val refreshAuthApi: AuthApi,
     private val sessionStore: SessionStore,
@@ -83,6 +86,7 @@ class AuthRepository(
     }
 
     suspend fun logout() {
+        FcmTokenRegistrar.unregisterCurrentToken(appContext)
         val refreshToken = sessionStore.getRefreshToken()
         try {
             if (refreshToken != null) {

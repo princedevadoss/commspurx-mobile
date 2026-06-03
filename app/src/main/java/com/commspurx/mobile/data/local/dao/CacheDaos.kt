@@ -11,6 +11,8 @@ import com.commspurx.mobile.data.local.entity.PurchaseContractEntity
 import com.commspurx.mobile.data.local.entity.SalesContractEntity
 import kotlinx.coroutines.flow.Flow
 
+private const val CACHE_INSERT_CHUNK = 100
+
 @Dao
 interface PurchaseContractDao {
     @Query("SELECT * FROM purchase_contracts WHERE accountId = :accountId ORDER BY periodEnd ASC")
@@ -22,7 +24,9 @@ interface PurchaseContractDao {
     @Transaction
     suspend fun replaceAll(accountId: String, rows: List<PurchaseContractEntity>) {
         deleteForAccount(accountId)
-        if (rows.isNotEmpty()) insertAll(rows)
+        rows.chunked(CACHE_INSERT_CHUNK).forEach { chunk ->
+            if (chunk.isNotEmpty()) insertAll(chunk)
+        }
     }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -43,7 +47,9 @@ interface SalesContractDao {
     @Transaction
     suspend fun replaceAll(accountId: String, rows: List<SalesContractEntity>) {
         deleteForAccount(accountId)
-        if (rows.isNotEmpty()) insertAll(rows)
+        rows.chunked(CACHE_INSERT_CHUNK).forEach { chunk ->
+            if (chunk.isNotEmpty()) insertAll(chunk)
+        }
     }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

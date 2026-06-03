@@ -1,6 +1,8 @@
 package com.commspurx.mobile
 
 import android.app.Application
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -21,6 +23,7 @@ import com.commspurx.mobile.data.repository.SalesContractsRepository
 import com.commspurx.mobile.network.ApiClient
 import com.commspurx.mobile.network.ConnectivityMonitor
 import com.commspurx.mobile.network.TokenProvider
+import com.commspurx.mobile.notifications.FcmTokenRegistrar
 import com.commspurx.mobile.notifications.NotificationMonitorScheduler
 import com.commspurx.mobile.notifications.NotificationPollManager
 
@@ -65,14 +68,18 @@ class CommspurxApplication : Application() {
     private lateinit var cachedDeliveriesRepository: CachedDeliveriesRepository
     private lateinit var tokenProvider: TokenProvider
 
+    lateinit var apiClient: ApiClient
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        initFirebaseIfNeeded()
         sessionStore = SessionStore(this)
         badgeStore = BadgeStore(this)
         monitorSeenStore = MonitorSeenStore(this)
         database = CommspurxDatabase.get(this)
 
-        val apiClient = ApiClient(sessionStore)
+        apiClient = ApiClient(sessionStore)
         tokenProvider = apiClient.getTokenProvider()
         connectivityMonitor = ConnectivityMonitor(this, apiClient.healthApi)
 
@@ -88,6 +95,7 @@ class CommspurxApplication : Application() {
         )
 
         authRepository = AuthRepository(
+            appContext = this,
             authApi = apiClient.authApi,
             refreshAuthApi = apiClient.refreshAuthApi,
             sessionStore = sessionStore,
@@ -134,7 +142,24 @@ class CommspurxApplication : Application() {
 
         if (sessionStore.getRefreshToken() != null) {
             NotificationMonitorScheduler.armBackgroundPolling(this)
+            FcmTokenRegistrar.syncTokenIfPossible(this)
         }
+    }
+
+    private fun initFirebaseIfNeeded() {
+        if (FirebaseApp.getApps(this).isNotEmpty()) return
+        val apiKey = BuildConfig.FIREBASE_API_KEY.trim()
+        val appId = BuildConfig.FIREBASE_APP_ID.trim()
+        val projectId = BuildConfig.FIREBASE_PROJECT_ID.trim()
+        if (apiKey.isEmpty() || appId.isEmpty() || projectId.isEmpty()) return
+        FirebaseApp.initializeApp(
+            this,
+            FirebaseOptions.Builder()
+                .setApiKey(apiKey)
+                .setApplicationId(appId)
+                .setProjectId(projectId)
+                .build(),
+        )
     }
 
     fun syncAuthTokenFromStore() {
@@ -144,6 +169,7 @@ class CommspurxApplication : Application() {
     fun startNotificationMonitor(user: AuthUser, resetBaseline: Boolean = false) {
         if (sessionStore.getRefreshToken() == null) return
         syncAuthTokenFromStore()
+        FcmTokenRegistrar.syncTokenIfPossible(this)
         NotificationMonitorScheduler.ensureRunning(
             context = this,
             resetBaseline = resetBaseline,
@@ -162,6 +188,7 @@ class CommspurxApplication : Application() {
     }
 
     fun stopNotificationMonitor() {
+        FcmTokenRegistrar.unregisterCurrentToken(this)
         NotificationMonitorScheduler.stop(this)
     }
 }

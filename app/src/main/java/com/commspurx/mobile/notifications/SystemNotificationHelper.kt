@@ -18,6 +18,7 @@ import com.commspurx.mobile.data.model.ContractSummary
 import com.commspurx.mobile.data.model.DeliveryItem
 import com.commspurx.mobile.data.model.NotificationItem
 import com.commspurx.mobile.data.model.APPROVAL_ENTITY_LABELS
+import com.commspurx.mobile.data.local.BadgeCounts
 import com.commspurx.mobile.data.model.displayRef
 
 class SystemNotificationHelper(private val context: Context) {
@@ -116,6 +117,48 @@ class SystemNotificationHelper(private val context: Context) {
             intent = deepLinkIntent(destination = NotificationExtras.DEST_PURCHASE_CONTRACTS),
             channelId = CHANNEL_ALERTS,
             alertAgain = true,
+        )
+    }
+
+    fun showPurchaseExpiringSummary(count: Int) {
+        post(
+            id = SUMMARY_PURCHASE_EXPIRING_ID,
+            title = "Purchase contracts expiring",
+            body = BadgeCounts.summaryLabel(count, "contract", "contracts"),
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_PURCHASE_CONTRACTS),
+            channelId = CHANNEL_ALERTS,
+            alertAgain = true,
+        )
+    }
+
+    fun showSalesExpiringSummary(count: Int) {
+        post(
+            id = SUMMARY_SALES_EXPIRING_ID,
+            title = "Sales contracts expiring",
+            body = BadgeCounts.summaryLabel(count, "contract", "contracts"),
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_SALES_CONTRACTS),
+            channelId = CHANNEL_ALERTS,
+            alertAgain = true,
+        )
+    }
+
+    fun showApprovalsSummary(count: Int) {
+        post(
+            id = SUMMARY_APPROVALS_ID,
+            title = "Approvals required",
+            body = BadgeCounts.summaryLabel(count, "approval", "approvals"),
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_APPROVALS),
+            channelId = CHANNEL_ALERTS,
+        )
+    }
+
+    fun showDeliveriesSummary(count: Int) {
+        post(
+            id = SUMMARY_DELIVERIES_ID,
+            title = "Pending deliveries",
+            body = BadgeCounts.summaryLabel(count, "delivery", "deliveries"),
+            intent = deepLinkIntent(destination = NotificationExtras.DEST_DELIVERIES),
+            channelId = CHANNEL_ALERTS,
         )
     }
 
@@ -284,6 +327,10 @@ class SystemNotificationHelper(private val context: Context) {
         const val CHANNEL_URGENT = "commspurx_urgent"
         const val CHANNEL_MONITOR = "commspurx_monitor"
         const val MONITOR_FOREGROUND_ID = 9001
+        const val SUMMARY_PURCHASE_EXPIRING_ID = 9101
+        const val SUMMARY_SALES_EXPIRING_ID = 9102
+        const val SUMMARY_APPROVALS_ID = 9103
+        const val SUMMARY_DELIVERIES_ID = 9104
 
         fun approvalNotificationId(item: ApprovalItem): Int =
             "approval:${item.entityType}:${item.id}".hashCode()

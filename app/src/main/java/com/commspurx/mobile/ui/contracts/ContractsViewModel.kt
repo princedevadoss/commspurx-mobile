@@ -2,13 +2,14 @@ package com.commspurx.mobile.ui.contracts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.commspurx.mobile.data.local.BadgeCounts
 import com.commspurx.mobile.data.model.AuthAccount
 import com.commspurx.mobile.data.model.AuthUser
 import com.commspurx.mobile.data.model.ContractSummary
 import com.commspurx.mobile.data.repository.PurchaseContractsRepository
 import com.commspurx.mobile.data.repository.SalesContractsRepository
+import com.commspurx.mobile.network.BackendConnectionStatus
 import com.commspurx.mobile.network.ConnectivityMonitor
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,36 +19,6 @@ import kotlinx.coroutines.launch
 enum class ContractListKind {
     PurchaseExpiring,
     SalesExpiring,
-    ;
-
-    fun observeExpiring(
-        accountId: String,
-        purchaseRepo: PurchaseContractsRepository,
-        salesRepo: SalesContractsRepository,
-    ): Flow<List<ContractSummary>> = when (this) {
-        PurchaseExpiring -> purchaseRepo.observeExpiring(accountId)
-        SalesExpiring -> salesRepo.observeExpiring(accountId)
-    }
-
-    suspend fun refresh(
-        accountId: String,
-        purchaseRepo: PurchaseContractsRepository,
-        salesRepo: SalesContractsRepository,
-    ): Boolean = when (this) {
-        PurchaseExpiring -> purchaseRepo.refresh(accountId)
-        SalesExpiring -> salesRepo.refresh(accountId)
-    }
-
-    suspend fun load(
-        accountId: String,
-        purchaseRepo: PurchaseContractsRepository,
-        salesRepo: SalesContractsRepository,
-    ) {
-        when (this) {
-            PurchaseExpiring -> purchaseRepo.load(accountId)
-            SalesExpiring -> salesRepo.load(accountId)
-        }
-    }
 }
 
 data class ContractsUiState(
@@ -56,7 +27,10 @@ data class ContractsUiState(
     val kind: ContractListKind,
     val contracts: List<ContractSummary> = emptyList(),
     val isRefreshing: Boolean = false,
+    val isLoadingMore: Boolean = false,
     val isOfflineData: Boolean = false,
+    val totalItems: Int = 0,
+    val hasMore: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val title: String = when (kind) {
@@ -65,6 +39,12 @@ data class ContractsUiState(
     }
 
     val subtitle: String = "Open contracts ending within 7 days"
+    val summaryLine: String? =
+        if (totalItems > BadgeCounts.DISPLAY_CAP) {
+            "$totalItems contracts — showing in pages of ${BadgeCounts.MOBILE_PAGE_SIZE}"
+        } else {
+            null
+        }
 }
 
 class ContractsViewModel(
@@ -80,49 +60,55 @@ class ContractsViewModel(
         ContractsUiState(user = user, account = account, kind = listKind),
     )
     val uiState: StateFlow<ContractsUiState> = _uiState.asStateFlow()
+    private var nextPage = 1
 
     init {
-        observeCache()
         refresh()
-    }
-
-    private fun observeCache() {
-        viewModelScope.launch {
-            val flow = listKind.observeExpiring(
-                accountId,
-                purchaseContractsRepository,
-                salesContractsRepository,
-            )
-            flow.collect { rows ->
-                _uiState.update {
-                    it.copy(
-                        contracts = rows,
-                        isOfflineData = connectivityMonitor.backendStatus.value !=
-                            com.commspurx.mobile.network.BackendConnectionStatus.Connected,
-                    )
-                }
-            }
-        }
     }
 
     fun refresh() {
         viewModelScope.launch {
-            val synced = listKind.refresh(
-                accountId,
-                purchaseContractsRepository,
-                salesContractsRepository,
-            )
-            if (!synced && _uiState.value.contracts.isEmpty()) {
-                listKind.load(
-                    accountId,
-                    purchaseContractsRepository,
-                    salesContractsRepository,
-                )
+            _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
+            nextPage = 1
+            val (rows, meta) = when (listKind) {
+                ContractListKind.PurchaseExpiring ->
+                    purchaseContractsRepository.loadPage(accountId, page = 1)
+                ContractListKind.SalesExpiring ->
+                    salesContractsRepository.loadPage(accountId, page = 1)
             }
+            val total = meta?.totalItems ?: rows.size
+            nextPage = 2
             _uiState.update {
                 it.copy(
-                    isOfflineData = !synced,
-                    errorMessage = null,
+                    contracts = rows,
+                    totalItems = total,
+                    hasMore = meta?.let { m -> m.page < m.totalPages } ?: false,
+                    isRefreshing = false,
+                    isOfflineData = connectivityMonitor.backendStatus.value !=
+                        BackendConnectionStatus.Connected,
+                )
+            }
+        }
+    }
+
+    fun loadMore() {
+        val state = _uiState.value
+        if (state.isLoadingMore || state.isRefreshing || !state.hasMore) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            val page = nextPage
+            val (rows, meta) = when (listKind) {
+                ContractListKind.PurchaseExpiring ->
+                    purchaseContractsRepository.loadPage(accountId, page = page)
+                ContractListKind.SalesExpiring ->
+                    salesContractsRepository.loadPage(accountId, page = page)
+            }
+            nextPage = page + 1
+            _uiState.update {
+                it.copy(
+                    contracts = it.contracts + rows,
+                    hasMore = meta?.let { m -> m.page < m.totalPages } ?: false,
+                    isLoadingMore = false,
                 )
             }
         }

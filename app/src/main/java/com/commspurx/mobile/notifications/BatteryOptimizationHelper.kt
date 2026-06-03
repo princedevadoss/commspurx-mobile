@@ -13,10 +13,15 @@ object BatteryOptimizationHelper {
     private const val PREFS = "commspurx_prefs"
     private const val KEY_REQUESTED = "battery_opt_requested"
 
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val powerManager = context.getSystemService(PowerManager::class.java) ?: return true
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
     fun requestExemptionIfNeeded(activity: Activity) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val powerManager = activity.getSystemService(PowerManager::class.java) ?: return
-        if (powerManager.isIgnoringBatteryOptimizations(activity.packageName)) return
+        if (isIgnoringBatteryOptimizations(activity)) return
 
         val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_REQUESTED, false)) return
@@ -28,6 +33,22 @@ object BatteryOptimizationHelper {
                     data = Uri.parse("package:${activity.packageName}")
                 },
             )
+        }
+    }
+
+    /** Opens system battery settings so the user can allow unrestricted background work. */
+    fun openBatterySettings(activity: Activity) {
+        val intents = listOf(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${activity.packageName}")
+            },
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${activity.packageName}")
+            },
+        )
+        for (intent in intents) {
+            if (runCatching { activity.startActivity(intent) }.isSuccess) return
         }
     }
 }
