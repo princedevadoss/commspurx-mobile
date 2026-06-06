@@ -6,8 +6,7 @@ Native Android app for **admins** and **managers** to receive Commspurx notifica
 
 - Secure login with the same credentials as the web app (account code, email, password)
 - JWT access tokens with encrypted refresh-token storage and automatic token refresh
-- **Admin:** pending approvals with approve/reject actions, plus activity notifications
-- **Manager:** activity notifications (including bulk import results)
+- **Admin & manager:** pending approvals with approve/reject actions, plus activity notifications
 - Bulk import notifications open a detail sheet with total / added / rejected counts and rejected row reasons
 - **FCM push** when the app is closed (see [MOBILE_PUSH_SETUP.md](./MOBILE_PUSH_SETUP.md))
 - Background polling fallback (30s while monitor service active, 15 min when idle)

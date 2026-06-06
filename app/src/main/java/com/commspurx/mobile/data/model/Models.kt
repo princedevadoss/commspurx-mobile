@@ -149,7 +149,8 @@ enum class UserRole(val value: String) {
     }
 }
 
-fun UserRole.canAccessApprovals(): Boolean = this == UserRole.Admin
+fun UserRole.canAccessApprovals(): Boolean =
+    this == UserRole.Admin || this == UserRole.Manager
 
 fun UserRole.canReceiveBulkNotifications(): Boolean =
     this == UserRole.Admin || this == UserRole.Manager

@@ -26,7 +26,8 @@ class NotificationPollCoordinator(context: Context) {
 
         val session = app.sessionStore.getSessionSnapshot() ?: return PollResult.NoSession
         val accountId = session.user.accountId
-        val isAdmin = UserRole.from(session.user.role)?.canAccessApprovals() == true
+        val canAccessApprovals =
+            UserRole.from(session.user.role)?.canAccessApprovals() == true
 
         if (resetBaseline) {
             seenStore.clear()
@@ -34,7 +35,7 @@ class NotificationPollCoordinator(context: Context) {
 
         var seen = seenStore.load()
 
-        val fetch = fetchSnapshot(accountId, isAdmin)
+        val fetch = fetchSnapshot(accountId, canAccessApprovals)
 
         MonitorState.emitSnapshot(
             MonitorSnapshot(
@@ -85,7 +86,10 @@ class NotificationPollCoordinator(context: Context) {
         return PollResult.Notified
     }
 
-    private suspend fun fetchSnapshot(accountId: String, isAdmin: Boolean): FetchedSnapshot {
+    private suspend fun fetchSnapshot(
+        accountId: String,
+        canAccessApprovals: Boolean,
+    ): FetchedSnapshot {
         val networkAvailable = app.connectivityMonitor.hasNetworkNow()
         var syncAttempted = false
         var anySyncOk = false
@@ -94,14 +98,14 @@ class NotificationPollCoordinator(context: Context) {
             syncAttempted = true
             anySyncOk = runCatching { app.notificationsRepository.refresh(accountId) }.getOrDefault(false) || anySyncOk
             anySyncOk = runCatching { app.deliveriesRepository.refresh(accountId) }.getOrDefault(false) || anySyncOk
-            if (isAdmin) {
+            if (canAccessApprovals) {
                 anySyncOk = runCatching { app.approvalsRepository.refreshPending() }.getOrDefault(false) || anySyncOk
             }
         }
 
         val notifications = runCatching { app.notificationsRepository.listUnread(accountId) }
             .getOrDefault(emptyList())
-        val approvals = if (isAdmin) {
+        val approvals = if (canAccessApprovals) {
             runCatching { app.approvalsRepository.listPending() }.getOrDefault(emptyList())
         } else {
             emptyList()
